@@ -1,31 +1,54 @@
 # Kafka User ACL Converter (Strimzi 0.30 Migration Tool)
-This script converts Kafka user ACL YAML files to a format where operations are merged by resource. This addresses a change introduced in Kafka Strimzi 0.30, where the YAML format for ACLs no longer requires separate entries for each operation on a resource. This script helps migrate your existing ACL configurations to the new format.
 
-## How it Works
-The script iterates through all YAML files in the specified directory (<PATH TO FILE>/*.yaml).
-For each file, it reads the YAML content and checks if the authorization.acls section exists.
+Converts Strimzi `KafkaUser` YAML files so that ACL operations are merged by resource. Strimzi 0.30 replaced the single `operation` field with an `operations` list, so one entry per operation is no longer needed. This script migrates existing ACL files to the new format in place.
 
-If the authorization.acls section exists, it iterates through each ACL entry.
-If an ACL entry doesn't have an operation key, the script prints a warning message and skips processing that entry.
-Otherwise, it extracts the resource name and type from the ACL entry and creates a unique key by combining them (e.g., topic_test).
+Before:
 
-The script then merges operations for the same resource. If an entry for the resource key already exists, the operation is appended to the list of operations for that resource. Otherwise, a new entry is created with the resource information and a list containing the operation.
+```yaml
+acls:
+  - resource: {type: topic, name: orders}
+    operation: Read
+  - resource: {type: topic, name: orders}
+    operation: Describe
+```
 
-Finally, the script overwrites the original YAML file with the modified data, where ACL entries have merged operations by resource.
-Note: If a file doesn't have any ACL entries with the operation key, the entire file is skipped.
+After:
+
+```yaml
+acls:
+  - resource: {type: topic, name: orders}
+    operations: [Read, Describe]
+```
 
 ## Usage
 
-- Replace <PATH TO FILE> with the actual path to the directory containing your Kafka user ACL YAML files.
-- Save the script as a Python file (e.g., kafka_acl_converter.py).
-- Run the script from your terminal:
+```sh
+pip install -r requirements.txt
 
+# Preview the converted YAML without touching files
+python3 kafka_acl_converter.py path/to/kafkausers --dry-run
+
+# Convert every *.yaml / *.yml file in the directory in place
+python3 kafka_acl_converter.py path/to/kafkausers
 ```
-python kafka_acl_converter.py
-```
 
-This will process all YAML files in the specified directory and convert them to the new format compatible with Kafka Strimzi 0.30.
+Files are overwritten, so commit them to git (or back them up) first.
 
-## Dependencies
-Python 3
-PyYAML library: You can install it using pip install pyyaml.
+## How it works
+
+For each YAML file in the directory:
+
+1. Skips files without `spec.authorization`.
+2. Groups ACL entries by resource name and type, collecting each entry's `operation` into an `operations` list.
+3. Writes the merged ACLs back to the file.
+
+If any ACL entry in a file has no `operation` key (for example, it is already converted), the whole file is skipped and a warning is printed.
+
+## Requirements
+
+- Python 3
+- PyYAML
+
+## License
+
+[MIT](LICENSE)

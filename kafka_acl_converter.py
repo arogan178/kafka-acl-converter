@@ -1,6 +1,8 @@
-import yaml
+import argparse
 import glob
 import os
+
+import yaml
 
 class OrderedDumper(yaml.SafeDumper):
     def _dict_representer(self, data):
@@ -21,7 +23,7 @@ def merge_operations_by_resource(yaml_file):
     with open(yaml_file, 'r') as file:
         data = yaml.safe_load(file)
 
-    if 'authorization' not in data.get('spec', {}):
+    if 'authorization' not in (data or {}).get('spec', {}):
         return None
 
     merged_items = {}
@@ -48,22 +50,31 @@ def merge_operations_by_resource(yaml_file):
     return data
 
 
+def main():
+    parser = argparse.ArgumentParser(description="Merge Strimzi KafkaUser ACL operations by resource (Strimzi 0.30+ format).")
+    parser.add_argument("directory", help="directory containing KafkaUser YAML files")
+    parser.add_argument("--dry-run", action="store_true", help="print the converted YAML instead of overwriting files")
+    args = parser.parse_args()
 
-path ='<PATH TO FILE>/*.yaml'
+    files = sorted(glob.glob(os.path.join(args.directory, "*.yaml")) + glob.glob(os.path.join(args.directory, "*.yml")))
+    if not files:
+        print(f"No YAML files found in {args.directory}")
+        return
+
+    for file in files:
+        print(f"Processing file: {file}")
+        merged_data = merge_operations_by_resource(file)
+
+        if merged_data is None:
+            print(f"Skipping file {file} because it doesn't have an 'operation' key")
+            continue
+
+        if args.dry_run:
+            print(yaml.dump(merged_data, Dumper=OrderedDumper))
+        else:
+            with open(file, 'w') as f:
+                yaml.dump(merged_data, f, Dumper=OrderedDumper)
 
 
-for file in glob.glob(path):
-    print(f"Processing file: {file}")
-    with open(file, 'r') as f:
-        original_data = yaml.safe_load(f)
-    merged_data = merge_operations_by_resource(file)
-    
-    output_filename = os.path.basename(file)
-
-    # Point to local directory to test
-    if merged_data is None:
-        print(f"Skipping file {file} because it doesn't have an 'operation' key")
-        continue
-    else:
-        with open(file, 'w') as file:
-            yaml.dump(merged_data, file, Dumper=OrderedDumper)
+if __name__ == "__main__":
+    main()
